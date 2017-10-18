@@ -17,14 +17,14 @@ fnNames = "fghelmnop"
 idNames = "abcxyzijk"
 
 data Ty = FnTy Ty Ty | Ty String
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data Expr = Lam String Ty Expr
           | And [Expr]
           | App Expr [Expr]
           | Var String
           | Lit String Ty
-          deriving (Show, Eq)
+          deriving (Show, Eq, Ord)
 
 renameBinders m (Lam a t e) =
   case (readMaybe a, M.lookup a m) of
@@ -46,7 +46,7 @@ tyOfLength' n = "<" ++ "e," ++ tyOfLength' (n-1) ++ ">"
 
 tyOfLength n = Ty $ tyOfLength' n
 
-lambdaP' :: Parser (Expr, Map String Int)
+lambdaP' :: Parser (Expr, Map Expr Int)
 lambdaP' = (do
   char '\\' >> space
   binders <- some (space >> alphaNumChar)
@@ -55,7 +55,7 @@ lambdaP' = (do
                           (head, m) <- lambdaP'
                           space
                           args <- sepBy lambdaP' (many $ char ' ')
-                          return (head, map fst args, M.unions (m : map snd args)))
+                          return (head, map fst args, M.insert head (length args) (M.unions (m : map snd args))))
                (space >> char ',' >> space)
   let exprs = map (\(a,b,_) -> (a,b)) exprs_maps
   let maps = M.unions (map (\(_,_,x) -> x) exprs_maps)
@@ -64,12 +64,12 @@ lambdaP' = (do
                                  case as of
                                    [] -> h
                                    _ -> App (varOrLit (length as) h) as) exprs)
-                (b:bs) -> Lam [b] (case M.lookup [b] maps of
+                (b:bs) -> Lam [b] (case M.lookup (Var [b]) maps of
                                     Nothing -> Ty "e"
                                     Just n -> tyOfLength n)
                                  (loop bs)
          in loop binders
-         , M.empty))
+         , maps))
   <|> (between (char '(' >> space) (space >> char ')') lambdaP')
   <|> (do
           s <- some (alphaNumChar <|> char '_')
